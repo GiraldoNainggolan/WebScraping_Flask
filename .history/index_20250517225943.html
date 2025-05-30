@@ -1,0 +1,624 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Scraped Data Dashboard</title>
+  <link rel="stylesheet" href="/output.css">
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@7.22.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    console.log("Starting Dashboard component...");
+    function Dashboard() {
+      const [transjatimData, setTransjatimData] = React.useState([]);
+      const [youtubeData, setYoutubeData] = React.useState([]);
+      const [transjatimFilter, setTransjatimFilter] = React.useState('');
+      const [youtubeFilter, setYoutubeFilter] = React.useState('');
+      const [transjatimSort, setTransjatimSort] = React.useState({ column: 'ulasan', direction: 'asc' });
+      const [youtubeSort, setYoutubeSort] = React.useState({ column: 'comment', direction: 'asc' });
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
+
+      React.useEffect(() => {
+        console.log("Fetching data...");
+        const fetchData = async () => {
+          try {
+            // Fetch TransJatim data
+            console.log("Fetching TransJatim data...");
+            const transjatimRes = await fetch('/transjatim_comments.csv');
+            if (!transjatimRes.ok) {
+              throw new Error(`Failed to fetch TransJatim data: ${transjatimRes.status} ${transjatimRes.statusText}`);
+            }
+            const transjatimText = await transjatimRes.text();
+            console.log("TransJatim CSV text:", transjatimText);
+            let transjatimParsed;
+            try {
+              transjatimParsed = Papa.parse(transjatimText, { header: true, skipEmptyLines: true }).data;
+              console.log("TransJatim parsed data:", transjatimParsed);
+              setTransjatimData(transjatimParsed || []);
+            } catch (parseErr) {
+              console.error("Error parsing TransJatim CSV:", parseErr);
+              setTransjatimData([]);
+            }
+
+            // Fetch YouTube data
+            console.log("Fetching YouTube data...");
+            const youtubeRes = await fetch('/youtube_comments.csv');
+            if (!youtubeRes.ok) {
+              throw new Error(`Failed to fetch YouTube data: ${youtubeRes.status} ${youtubeRes.statusText}`);
+            }
+            const youtubeText = await youtubeRes.text();
+            console.log("YouTube CSV text:", youtubeText);
+            let youtubeParsed;
+            try {
+              youtubeParsed = Papa.parse(youtubeText, { header: true, skipEmptyLines: true }).data;
+              console.log("YouTube parsed data:", youtubeParsed);
+              setYoutubeData(youtubeParsed || []);
+            } catch (parseErr) {
+              console.error("Error parsing YouTube CSV:", parseErr);
+              setYoutubeData([]);
+            }
+
+            setLoading(false);
+          } catch (err) {
+            console.error("Fetch error:", err.message);
+            setError(err.message);
+            setLoading(false);
+          }
+        };
+        fetchData();
+      }, []);
+
+      const sortData = (data, column, direction) => {
+        if (!data || !Array.isArray(data) || data.length === 0) {
+          console.log("No data to sort or invalid data:", data);
+          return [];
+        }
+        console.log("Sorting data by", column, direction);
+        return [...data].sort((a, b) => {
+          const valA = (a[column] || '').toString().toLowerCase();
+          const valB = (b[column] || '').toString().toLowerCase();
+          if (valA < valB) return direction === 'asc' ? -1 : 1;
+          if (valA > valB) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+      };
+
+      const handleSort = (setSort, currentSort, column) => {
+        console.log("Handling sort for", column);
+        setSort({
+          column,
+          direction: currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc'
+        });
+      };
+
+      const filteredTransjatim = (transjatimData || []).filter(row =>
+        (row?.ulasan || '').toLowerCase().includes(transjatimFilter.toLowerCase()) ||
+        (row?.clean_ulasan || '').toLowerCase().includes(transjatimFilter.toLowerCase())
+      );
+      const sortedTransjatim = sortData(filteredTransjatim, transjatimSort.column, transjatimSort.direction);
+
+      const filteredYoutube = (youtubeData || []).filter(row =>
+        (row?.comment || '').toLowerCase().includes(youtubeFilter.toLowerCase()) ||
+        (row?.video_url || '').toLowerCase().includes(youtubeFilter.toLowerCase())
+      );
+      const sortedYoutube = sortData(filteredYoutube, youtubeSort.column, youtubeSort.direction);
+
+      console.log("Rendering with state:", {
+        loading,
+        error,
+        transjatimDataLength: transjatimData?.length,
+        youtubeDataLength: youtubeData?.length
+      });
+
+      if (loading) return <div className="text-center p-4">Loading...</div>;
+      if (error) return <div className="text-center p-4 text-red-600">Error: {error}</div>;
+
+      return (
+        <div className="container mx-auto p-4">
+          <h1 className="text-3xl font-bold mb-6 text-center">Scraped Data Dashboard</h1>
+
+          {/* Transjatim */}
+          <div className="mb-12">
+            <h2 className="text-2xl font-semibold mb-4">TransJatim Reviews</h2>
+            <input
+              type="text"
+              placeholder="Search reviews..."
+              className="w-full p-2 mb-4 border rounded"
+              value={transjatimFilter}
+              onChange={e => setTransjatimFilter(e.target.value)}
+            />
+            <div className="overflow-x-auto">
+              {sortedTransjatim.length === 0 ? (
+                <p className="text-center text-gray-600">No TransJatim reviews available.</p>
+              ) : (
+                <table className="w-full border-collapse bg-white shadow-md">
+                  <thead className="bg-gray-200">
+                    <tr>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setTransjatimSort, transjatimSort, 'ulasan')}>
+                        Original Review {transjatimSort.column === 'ulasan' && (transjatimSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setTransjatimSort, transjatimSort, 'clean_ulasan')}>
+                        Cleaned Review {transjatimSort.column === 'clean_ulasan' && (transjatimSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedTransjatim.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="p-2 border">{row.ulasan}</td>
+                        <td className="p-2 border">{row.clean_ulasan}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* YouTube */}
+          <div>
+            <h2 className="text-2xl font-semibold mb-4">YouTube Comments</h2>
+            <input
+              type="text"
+              placeholder="Search comments..."
+              className="w-full p-2 mb-4 border rounded"
+              value={youtubeFilter}
+              onChange={e => setYoutubeFilter(e.target.value)}
+            />
+            <div className="overflow-x-auto">
+              {sortedYoutube.length === 0 ? (
+                <p className="text-center text-gray-600">No YouTube comments available.</p>
+              ) : (
+                <table className="w-full border-collapse bg-white shadow-md">
+                  <thead className="bg-gray-200">
+                    <tr>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setYoutubeSort, youtubeSort, 'video_url')}>
+                        Video URL {youtubeSort.column === 'video_url' && (youtubeSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setYoutubeSort, youtubeSort, 'comment')}>
+                        Comment {youtubeSort.column === 'comment' && (youtubeSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedYoutube.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="p-2 border">
+                          <a href={row.video_url} className="text-blue-600 hover:underline" target="_blank">{row.video_url}</a>
+                        </td>
+                        <td className="p-2 border">{row.comment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    try {
+      console.log("Rendering root...");
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<Dashboard />);
+    } catch (err) {
+      console.error("Render error:", err);
+    }
+  </script>
+</body>
+</html> -->
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link href="output.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 text-gray-900 p-10">
+  <h1 class="text-3xl font-bold text-center">Halo Dunia!</h1>
+  <p class="text-center mt-4">Ini adalah halaman dengan Tailwind CSS.</p>
+</body>
+</html> -->
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scraped Data Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+    .section {
+      margin-bottom: 40px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #e0e0e0;
+      cursor: pointer;
+    }
+    tr:hover {
+      background-color: #f5f5f5;
+    }
+    a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .error {
+      color: red;
+      text-align: center;
+      padding: 10px;
+    }
+    .loading {
+      text-align: center;
+      padding: 10px;
+    }
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Scraped Data Dashboard</h1>
+
+  <div id="transjatim-section" class="section">
+    <h2>TransJatim Reviews</h2>
+    <input type="text" id="transjatim-filter" placeholder="Search reviews...">
+    <div id="transjatim-table"></div>
+  </div>
+
+  <div id="youtube-section" class="section">
+    <h2>YouTube Comments</h2>
+    <input type="text" id="youtube-filter" placeholder="Search comments...">
+    <div id="youtube-table"></div>
+  </div>
+
+  <script>
+    // Simple CSV parser
+    function parseCSV(text) {
+      const rows = text.trim().split('\n');
+      if (rows.length <= 1) return [];
+      const headers = rows[0].split(',').map(header => header.trim());
+      return rows.slice(1).map(row => {
+        const values = row.split(',').map(value => value.trim());
+        return headers.reduce((obj, header, index) => {
+          obj[header] = values[index] || '';
+          return obj;
+        }, {});
+      });
+    }
+
+    // Fetch and display data
+    function loadData() {
+      const transjatimTable = document.getElementById('transjatim-table');
+      const youtubeTable = document.getElementById('youtube-table');
+      transjatimTable.innerHTML = '<div class="loading">Loading...</div>';
+      youtubeTable.innerHTML = '<div class="loading">Loading...</div>';
+
+      Promise.all([
+        fetch('/transjatim_comments.csv').then(res => {
+          if (!res.ok) throw new Error(`Failed to fetch TransJatim data: ${res.status} ${res.statusText}`);
+          return res.text();
+        }),
+        fetch('/youtube_comments.csv').then(res => {
+          if (!res.ok) throw new Error(`Failed to fetch YouTube data: ${res.status} ${res.statusText}`);
+          return res.text();
+        })
+      ])
+      .then(([transjatimText, youtubeText]) => {
+        const transjatimData = parseCSV(transjatimText);
+        const youtubeData = parseCSV(youtubeText);
+
+        console.log('TransJatim data:', transjatimData);
+        console.log('YouTube data:', youtubeData);
+
+        if (transjatimData.length === 0) {
+          transjatimTable.innerHTML = '<div class="no-data">No TransJatim reviews available.</div>';
+        } else {
+          displayTable('transjatim', transjatimData);
+        }
+
+        if (youtubeData.length === 0) {
+          youtubeTable.innerHTML = '<div class="no-data">No YouTube comments available.</div>';
+        } else {
+          displayTable('youtube', youtubeData);
+        }
+      })
+      .catch(err => {
+        console.error('Fetch error:', err);
+        transjatimTable.innerHTML = '<div class="error">Error: Failed to load TransJatim data.</div>';
+        youtubeTable.innerHTML = '<div class="error">Error: Failed to load YouTube data.</div>';
+      });
+    }
+
+    // Display table with sorting
+    function displayTable(type, data) {
+      const tableDiv = document.getElementById(`${type}-table`);
+      const filterInput = document.getElementById(`${type}-filter`);
+      let sortColumn = type === 'transjatim' ? 'ulasan' : 'comment';
+      let sortDirection = 'asc';
+
+      function renderTable(filteredData) {
+        const sortedData = [...filteredData].sort((a, b) => {
+          const valA = (a[sortColumn] || '').toString().toLowerCase();
+          const valB = (b[sortColumn] || '').toString().toLowerCase();
+          if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+          if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        let html = '<table><thead><tr>';
+        const headers = Object.keys(sortedData[0] || {});
+        headers.forEach(header => {
+          html += `<th onclick="sortTable('${type}', '${header}')">${header} ${sortColumn === header ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        sortedData.forEach(row => {
+          html += '<tr>';
+          headers.forEach(header => {
+            if (header === 'video_url' && row[header]) {
+              html += `<td><a href="${row[header]}" target="_blank">${row[header]}</a></td>`;
+            } else {
+              html += `<td>${row[header] || ''}</td>`;
+            }
+          });
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        tableDiv.innerHTML = html;
+      }
+
+      filterInput.addEventListener('input', () => {
+        const filterValue = filterInput.value.toLowerCase();
+        const filteredData = data.filter(row =>
+          Object.values(row).some(value =>
+            (value || '').toString().toLowerCase().includes(filterValue)
+          )
+        );
+        renderTable(filteredData);
+      });
+
+      function sortTable(typeParam, column) {
+        if (typeParam === type) {
+          if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+          }
+          renderTable(data.filter(row =>
+            Object.values(row).some(value =>
+              (value || '').toString().toLowerCase().includes(filterInput.value.toLowerCase())
+            )
+          ));
+        }
+      }
+
+      renderTable(data);
+    }
+
+    // Load data when the page loads
+    window.onload = loadData;
+  </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sidebar Menu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .sidebar {
+            transition: all 0.3s ease;
+        }
+        .dropdown-content {
+            display: none;
+        }
+        .dropdown-content.active {
+            display: block;
+        }
+        .section {
+           margin-bottom: 40px;
+        }
+        input[type="text"] {
+          width: 100%;
+          padding: 8px;
+          margin-bottom: 10px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          box-sizing: border-box;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen bg-gray-100">
+    <!-- Sidebar -->
+    <div class="sidebar w-64 bg-gray-800 text-white h-screen p-4">
+        <h2 class="text-xl font-bold mb-6">Menu</h2>
+        <!-- Data Visualization -->
+        <div class="mb-4">
+            <button class="w-full text-left py-2 px-4 bg-gray-700 rounded hover:bg-gray-600" onclick="toggleDropdown('dataViz')">Data Visualization</button>
+            <div id="dataViz" class="dropdown-content mt-2">
+                <button class="w-full text-left py-2 px-4 bg-gray-600 hover:bg-gray-500" onclick="showContent('labelAnalysis')">Label Analysis</button>
+                <button class="w-full text-left py-2 px-4 bg-gray-600 hover:bg-gray-500" onclick="showContent('confusionMatrix')">Confusion Matrix</button>
+            </div>
+        </div>
+        <!-- Choose Sentiment -->
+        <div>
+            <button class="w-full text-left py-2 px-4 bg-gray-700 rounded hover:bg-gray-600" onclick="toggleDropdown('sentiment')">Choose Sentiment</button>
+            <div id="sentiment" class="dropdown-content mt-2">
+                <button class="w-full text-left py-2 px-4 bg-gray-600 hover:bg-gray-500" onclick="showContent('positive')">Positif</button>
+                <button class="w-full text-left py-2 px-4 bg-gray-600 hover:bg-gray-500" onclick="showContent('negative')">Negatif</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="flex-1 p-6">
+        <h1 class="text-2xl font-bold mb-4">Welcome</h1>
+        <p>Please select an option from the sidebar to view the data.</p>
+    </div>
+
+    <script>
+        // Toggle dropdown menu
+        function toggleDropdown(id) {
+            const dropdown = document.getElementById(id);
+            dropdown.classList.toggle('active');
+        }
+
+        // Dummy data placeholders (replace with actual data from files)
+        const labelAnalysisData = [
+            { id: 1, label: "Positive", text: "This is a great product!" },
+            { id: 2, label: "Negative", text: "I didn't like this at all." }
+            
+        ];
+
+        const confusionMatrixData = {
+            truePositive: 50,
+            falsePositive: 10,
+            trueNegative: 40,
+            falseNegative: 5
+        };
+
+        const positiveSentimentData = [
+            "Great experience with this service!",
+            "Really happy with the results."
+        ];
+
+        const negativeSentimentData = [
+            "Very disappointing product.",
+            "Would not recommend this."
+        ];
+
+        // Function to display content based on menu selection
+        function showContent(type) {
+            const mainContent = document.getElementById('mainContent');
+            let content = '';
+
+            if (type === 'labelAnalysis') {
+                content = `
+                    <h1 class="text-2xl font-bold mb-4">Label Analysis</h1>
+
+                    <div id="transjatim-section" class="section">
+                      <h2>TransJatim Reviews</h2>
+                      <input type="text" id="transjatim-filter" placeholder="Search reviews...">
+                      <div id="transjatim-table"></div>
+                    </div>
+
+                    <div id="youtube-section" class="section">
+                      <h2>YouTube Comments</h2>
+                      <input type="text" id="youtube-filter" placeholder="Search comments...">
+                      <div id="youtube-table"></div>
+                    </div>
+                    <table class="w-full border-collapse border border-gray-300">
+                        <thead>
+                            <tr class="bg-gray-200">
+                                <th class="border border-gray-300 p-2">ID</th>
+                                <th class="border border-gray-300 p-2">Label</th>
+                                <th class="border border-gray-300 p-2">Text</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${labelAnalysisData.map(row => `
+                                <tr>
+                                    <td class="border border-gray-300 p-2">${row.id}</td>
+                                    <td class="border border-gray-300 p-2">${row.label}</td>
+                                    <td class="border border-gray-300 p-2">${row.text}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else if (type === 'confusionMatrix') {
+                content = `
+                    <h1 class="text-2xl font-bold mb-4">Confusion Matrix</h1>
+                    <table class="w-1/2 border-collapse border border-gray-300">
+                        <thead>
+                            <tr class="bg-gray-200">
+                                <th class="border border-gray-300 p-2"></th>
+                                <th class="border border-gray-300 p-2">Predicted Positive</th>
+                                <th class="border border-gray-300 p-2">Predicted Negative</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="border border-gray-300 p-2 font-bold">Actual Positive</td>
+                                <td class="border border-gray-300 p-2">${confusionMatrixData.truePositive}</td>
+                                <td class="border border-gray-300 p-2">${confusionMatrixData.falseNegative}</td>
+                            </tr>
+                            <tr>
+                                <td class="border border-gray-300 p-2 font-bold">Actual Negative</td>
+                                <td class="border border-gray-300 p-2">${confusionMatrixData.falsePositive}</td>
+                                <td class="border border-gray-300 p-2">${confusionMatrixData.trueNegative}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                `;
+            } else if (type === 'positive') {
+                content = `
+                    <h1 class="text-2xl font-bold mb-4">Positive Sentiment</h1>
+                    <ul class="list-disc pl-5">
+                        ${positiveSentimentData.map(item => `<li>${item}</li>`).join('')}
+                    </ul>
+                `;
+            } else if (type === 'negative') {
+                content = `
+                    <h1 class="text-2xl font-bold mb-4">Negative Sentiment</h1>
+                    <ul class="list-disc pl-5">
+                        ${negativeSentimentData.map(item => `<li>${item}</li>`).join('')}
+                    </ul>
+                `;
+            }
+
+            mainContent.innerHTML = content;
+        }
+    </script>
+</body>
+</html>

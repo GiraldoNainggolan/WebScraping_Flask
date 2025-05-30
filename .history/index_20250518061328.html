@@ -1,0 +1,1107 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Scraped Data Dashboard</title>
+  <link rel="stylesheet" href="/output.css">
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@7.22.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    console.log("Starting Dashboard component...");
+    function Dashboard() {
+      const [transjatimData, setTransjatimData] = React.useState([]);
+      const [youtubeData, setYoutubeData] = React.useState([]);
+      const [transjatimFilter, setTransjatimFilter] = React.useState('');
+      const [youtubeFilter, setYoutubeFilter] = React.useState('');
+      const [transjatimSort, setTransjatimSort] = React.useState({ column: 'ulasan', direction: 'asc' });
+      const [youtubeSort, setYoutubeSort] = React.useState({ column: 'comment', direction: 'asc' });
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
+
+      React.useEffect(() => {
+        console.log("Fetching data...");
+        const fetchData = async () => {
+          try {
+            // Fetch TransJatim data
+            console.log("Fetching TransJatim data...");
+            const transjatimRes = await fetch('/transjatim_comments.csv');
+            if (!transjatimRes.ok) {
+              throw new Error(`Failed to fetch TransJatim data: ${transjatimRes.status} ${transjatimRes.statusText}`);
+            }
+            const transjatimText = await transjatimRes.text();
+            console.log("TransJatim CSV text:", transjatimText);
+            let transjatimParsed;
+            try {
+              transjatimParsed = Papa.parse(transjatimText, { header: true, skipEmptyLines: true }).data;
+              console.log("TransJatim parsed data:", transjatimParsed);
+              setTransjatimData(transjatimParsed || []);
+            } catch (parseErr) {
+              console.error("Error parsing TransJatim CSV:", parseErr);
+              setTransjatimData([]);
+            }
+
+            // Fetch YouTube data
+            console.log("Fetching YouTube data...");
+            const youtubeRes = await fetch('/youtube_comments.csv');
+            if (!youtubeRes.ok) {
+              throw new Error(`Failed to fetch YouTube data: ${youtubeRes.status} ${youtubeRes.statusText}`);
+            }
+            const youtubeText = await youtubeRes.text();
+            console.log("YouTube CSV text:", youtubeText);
+            let youtubeParsed;
+            try {
+              youtubeParsed = Papa.parse(youtubeText, { header: true, skipEmptyLines: true }).data;
+              console.log("YouTube parsed data:", youtubeParsed);
+              setYoutubeData(youtubeParsed || []);
+            } catch (parseErr) {
+              console.error("Error parsing YouTube CSV:", parseErr);
+              setYoutubeData([]);
+            }
+
+            setLoading(false);
+          } catch (err) {
+            console.error("Fetch error:", err.message);
+            setError(err.message);
+            setLoading(false);
+          }
+        };
+        fetchData();
+      }, []);
+
+      const sortData = (data, column, direction) => {
+        if (!data || !Array.isArray(data) || data.length === 0) {
+          console.log("No data to sort or invalid data:", data);
+          return [];
+        }
+        console.log("Sorting data by", column, direction);
+        return [...data].sort((a, b) => {
+          const valA = (a[column] || '').toString().toLowerCase();
+          const valB = (b[column] || '').toString().toLowerCase();
+          if (valA < valB) return direction === 'asc' ? -1 : 1;
+          if (valA > valB) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+      };
+
+      const handleSort = (setSort, currentSort, column) => {
+        console.log("Handling sort for", column);
+        setSort({
+          column,
+          direction: currentSort.column === column && currentSort.direction === 'asc' ? 'desc' : 'asc'
+        });
+      };
+
+      const filteredTransjatim = (transjatimData || []).filter(row =>
+        (row?.ulasan || '').toLowerCase().includes(transjatimFilter.toLowerCase()) ||
+        (row?.clean_ulasan || '').toLowerCase().includes(transjatimFilter.toLowerCase())
+      );
+      const sortedTransjatim = sortData(filteredTransjatim, transjatimSort.column, transjatimSort.direction);
+
+      const filteredYoutube = (youtubeData || []).filter(row =>
+        (row?.comment || '').toLowerCase().includes(youtubeFilter.toLowerCase()) ||
+        (row?.video_url || '').toLowerCase().includes(youtubeFilter.toLowerCase())
+      );
+      const sortedYoutube = sortData(filteredYoutube, youtubeSort.column, youtubeSort.direction);
+
+      console.log("Rendering with state:", {
+        loading,
+        error,
+        transjatimDataLength: transjatimData?.length,
+        youtubeDataLength: youtubeData?.length
+      });
+
+      if (loading) return <div className="text-center p-4">Loading...</div>;
+      if (error) return <div className="text-center p-4 text-red-600">Error: {error}</div>;
+
+      return (
+        <div className="container mx-auto p-4">
+          <h1 className="text-3xl font-bold mb-6 text-center">Scraped Data Dashboard</h1>
+
+          {/* Transjatim */}
+          <div className="mb-12">
+            <h2 className="text-2xl font-semibold mb-4">TransJatim Reviews</h2>
+            <input
+              type="text"
+              placeholder="Search reviews..."
+              className="w-full p-2 mb-4 border rounded"
+              value={transjatimFilter}
+              onChange={e => setTransjatimFilter(e.target.value)}
+            />
+            <div className="overflow-x-auto">
+              {sortedTransjatim.length === 0 ? (
+                <p className="text-center text-gray-600">No TransJatim reviews available.</p>
+              ) : (
+                <table className="w-full border-collapse bg-white shadow-md">
+                  <thead className="bg-gray-200">
+                    <tr>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setTransjatimSort, transjatimSort, 'ulasan')}>
+                        Original Review {transjatimSort.column === 'ulasan' && (transjatimSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setTransjatimSort, transjatimSort, 'clean_ulasan')}>
+                        Cleaned Review {transjatimSort.column === 'clean_ulasan' && (transjatimSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedTransjatim.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="p-2 border">{row.ulasan}</td>
+                        <td className="p-2 border">{row.clean_ulasan}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* YouTube */}
+          <div>
+            <h2 className="text-2xl font-semibold mb-4">YouTube Comments</h2>
+            <input
+              type="text"
+              placeholder="Search comments..."
+              className="w-full p-2 mb-4 border rounded"
+              value={youtubeFilter}
+              onChange={e => setYoutubeFilter(e.target.value)}
+            />
+            <div className="overflow-x-auto">
+              {sortedYoutube.length === 0 ? (
+                <p className="text-center text-gray-600">No YouTube comments available.</p>
+              ) : (
+                <table className="w-full border-collapse bg-white shadow-md">
+                  <thead className="bg-gray-200">
+                    <tr>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setYoutubeSort, youtubeSort, 'video_url')}>
+                        Video URL {youtubeSort.column === 'video_url' && (youtubeSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th className="p-2 border cursor-pointer" onClick={() => handleSort(setYoutubeSort, youtubeSort, 'comment')}>
+                        Comment {youtubeSort.column === 'comment' && (youtubeSort.direction === 'asc' ? '↑' : '↓')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedYoutube.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="p-2 border">
+                          <a href={row.video_url} className="text-blue-600 hover:underline" target="_blank">{row.video_url}</a>
+                        </td>
+                        <td className="p-2 border">{row.comment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    try {
+      console.log("Rendering root...");
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<Dashboard />);
+    } catch (err) {
+      console.error("Render error:", err);
+    }
+  </script>
+</body>
+</html> -->
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link href="output.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 text-gray-900 p-10">
+  <h1 class="text-3xl font-bold text-center">Halo Dunia!</h1>
+  <p class="text-center mt-4">Ini adalah halaman dengan Tailwind CSS.</p>
+</body>
+</html> -->
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scraped Data Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #333;
+    }
+    .section {
+      margin-bottom: 40px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    th {
+      background-color: #e0e0e0;
+      cursor: pointer;
+    }
+    tr:hover {
+      background-color: #f5f5f5;
+    }
+    a {
+      color: #0066cc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .error {
+      color: red;
+      text-align: center;
+      padding: 10px;
+    }
+    .loading {
+      text-align: center;
+      padding: 10px;
+    }
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Scraped Data Dashboard</h1>
+
+  <div id="transjatim-section" class="section">
+    <h2>TransJatim Reviews</h2>
+    <input type="text" id="transjatim-filter" placeholder="Search reviews...">
+    <div id="transjatim-table"></div>
+  </div>
+
+  <div id="youtube-section" class="section">
+    <h2>YouTube Comments</h2>
+    <input type="text" id="youtube-filter" placeholder="Search comments...">
+    <div id="youtube-table"></div>
+  </div>
+
+  <script>
+    // Simple CSV parser
+    function parseCSV(text) {
+      const rows = text.trim().split('\n');
+      if (rows.length <= 1) return [];
+      const headers = rows[0].split(',').map(header => header.trim());
+      return rows.slice(1).map(row => {
+        const values = row.split(',').map(value => value.trim());
+        return headers.reduce((obj, header, index) => {
+          obj[header] = values[index] || '';
+          return obj;
+        }, {});
+      });
+    }
+
+    // Fetch and display data
+    function loadData() {
+      const transjatimTable = document.getElementById('transjatim-table');
+      const youtubeTable = document.getElementById('youtube-table');
+      transjatimTable.innerHTML = '<div class="loading">Loading...</div>';
+      youtubeTable.innerHTML = '<div class="loading">Loading...</div>';
+
+      Promise.all([
+        fetch('/transjatim_comments.csv').then(res => {
+          if (!res.ok) throw new Error(`Failed to fetch TransJatim data: ${res.status} ${res.statusText}`);
+          return res.text();
+        }),
+        fetch('/youtube_comments.csv').then(res => {
+          if (!res.ok) throw new Error(`Failed to fetch YouTube data: ${res.status} ${res.statusText}`);
+          return res.text();
+        })
+      ])
+      .then(([transjatimText, youtubeText]) => {
+        const transjatimData = parseCSV(transjatimText);
+        const youtubeData = parseCSV(youtubeText);
+
+        console.log('TransJatim data:', transjatimData);
+        console.log('YouTube data:', youtubeData);
+
+        if (transjatimData.length === 0) {
+          transjatimTable.innerHTML = '<div class="no-data">No TransJatim reviews available.</div>';
+        } else {
+          displayTable('transjatim', transjatimData);
+        }
+
+        if (youtubeData.length === 0) {
+          youtubeTable.innerHTML = '<div class="no-data">No YouTube comments available.</div>';
+        } else {
+          displayTable('youtube', youtubeData);
+        }
+      })
+      .catch(err => {
+        console.error('Fetch error:', err);
+        transjatimTable.innerHTML = '<div class="error">Error: Failed to load TransJatim data.</div>';
+        youtubeTable.innerHTML = '<div class="error">Error: Failed to load YouTube data.</div>';
+      });
+    }
+
+    // Display table with sorting
+    function displayTable(type, data) {
+      const tableDiv = document.getElementById(`${type}-table`);
+      const filterInput = document.getElementById(`${type}-filter`);
+      let sortColumn = type === 'transjatim' ? 'ulasan' : 'comment';
+      let sortDirection = 'asc';
+
+      function renderTable(filteredData) {
+        const sortedData = [...filteredData].sort((a, b) => {
+          const valA = (a[sortColumn] || '').toString().toLowerCase();
+          const valB = (b[sortColumn] || '').toString().toLowerCase();
+          if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+          if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        let html = '<table><thead><tr>';
+        const headers = Object.keys(sortedData[0] || {});
+        headers.forEach(header => {
+          html += `<th onclick="sortTable('${type}', '${header}')">${header} ${sortColumn === header ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        sortedData.forEach(row => {
+          html += '<tr>';
+          headers.forEach(header => {
+            if (header === 'video_url' && row[header]) {
+              html += `<td><a href="${row[header]}" target="_blank">${row[header]}</a></td>`;
+            } else {
+              html += `<td>${row[header] || ''}</td>`;
+            }
+          });
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        tableDiv.innerHTML = html;
+      }
+
+      filterInput.addEventListener('input', () => {
+        const filterValue = filterInput.value.toLowerCase();
+        const filteredData = data.filter(row =>
+          Object.values(row).some(value =>
+            (value || '').toString().toLowerCase().includes(filterValue)
+          )
+        );
+        renderTable(filteredData);
+      });
+
+      function sortTable(typeParam, column) {
+        if (typeParam === type) {
+          if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+          }
+          renderTable(data.filter(row =>
+            Object.values(row).some(value =>
+              (value || '').toString().toLowerCase().includes(filterInput.value.toLowerCase())
+            )
+          ));
+        }
+      }
+
+      renderTable(data);
+    }
+
+    // Load data when the page loads
+    window.onload = loadData;
+  </script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Sidebar Menu</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background: linear-gradient(180deg, #2c3e50 0%, #1a2634 100%);
+            color: white;
+            height: 100vh;
+            position: fixed;
+            padding: 20px;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2);
+            z-index: 999;
+        }
+        .sidebar.hidden {
+            transform: translateX(-100%);
+        }
+        .hamburger {
+            font-size: 24px;
+            cursor: pointer;
+            padding: 10px;
+            background: #34495e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            display: none;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+        .hamburger:hover {
+            background: #465c71;
+            transform: scale(1.1);
+        }
+        .menu-item {
+            margin-bottom: 15px;
+            margin-top: 10px;
+        }
+        .menu-item button {
+            width: 100%;
+            padding: 12px;
+            background: #34495e;
+            border: none;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            transition: background 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        .menu-item button:hover {
+            background: #465c71;
+            transform: translateY(-2px);
+        }
+        .dropdown-icon {
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+        .dropdown-content {
+            display: none;
+            margin-top: 5px;
+            background: #3a5066;
+            border-radius: 5px;
+            padding: 5px 0;
+        }
+        .dropdown-content.active {
+            display: block;
+        }
+        .dropdown-content button {
+            width: 100%;
+            padding: 10px 15px;
+            background: #465c71;
+            border: none;
+            color: white;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.3s, transform 0.2s;
+        }
+        .dropdown-content button:hover {
+            background: #5d728f;
+            transform: translateY(-2px);
+        }
+        .dropdown-content button i {
+            margin-right: 8px;
+        }
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+            flex: 1;
+            transition: margin-left 0.3s ease;
+        }
+        .main-content.shifted {
+            margin-left: 0;
+        }
+        .welcome-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 40px);
+            text-align: center;
+            background: linear-gradient(135deg, #ffffff 0%, #f4f4f9 100%);
+            border-radius: 10px;
+            padding: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .welcome-section h1 {
+            font-size: 36px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-weight: 700;
+            animation: fadeInDown 1s ease;
+        }
+        .welcome-section p {
+            font-size: 18px;
+            color: #666;
+            max-width: 600px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            animation: fadeIn 1.2s ease;
+        }
+        .welcome-section .cta-button {
+            padding: 12px 24px;
+            background: #34495e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            animation: fadeInUp 1.4s ease;
+        }
+        .welcome-section .cta-button:hover {
+            background: #465c71;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background: #ecf0f1;
+            cursor: pointer;
+        }
+        tr:hover {
+            background: #f9f9f9;
+        }
+        .loading, .no-data, .error {
+            text-align: center;
+            padding: 10px;
+        }
+        .loading { color: #7f8c8d; }
+        .no-data { color: #95a5a6; }
+        .error { color: #e74c3c; }
+        .scroll-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #34495e;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        .scroll-to-top:hover {
+            background: #465c71;
+            transform: scale(1.1);
+        }
+        .scroll-to-top.show {
+            display: flex;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 768px) {
+            .hamburger {
+                display: block;
+            }
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.visible {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .main-content.shifted {
+                margin-left: 250px;
+            }
+            .welcome-section {
+                padding: 20px;
+            }
+            .welcome-section h1 {
+                font-size: 28px;
+            }
+            .welcome-section p {
+                font-size: 16px;
+            }
+        }
+        /* Style for Classification Report */
+        .classification-report {
+            background: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+        /* Style for Confusion Matrix Container */
+        .confusion-matrix-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        canvas {
+            max-width: 400px;
+            max-height: 400px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Include Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <button class="hamburger" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+    </button>
+    <div class="sidebar" id="sidebar">
+        <h2 class="text-xl font-bold mb-6 text-center">Menu</h2>
+        <div class="menu-item">
+            <button onclick="toggleDropdown('dataViz')">
+                <i class="fas fa-chart-bar"></i>
+                Data Visualization
+                <span class="dropdown-icon">▼</span>
+            </button>
+            <div id="dataViz" class="dropdown-content">
+                <button onclick="showContent('labelAnalysis')"><i class="fas fa-chart-pie"></i>Label Analysis</button>
+                <button onclick="showContent('confusionMatrix')"><i class="fas fa-table"></i>Confusion Matrix</button>
+            </div>
+        </div>
+        <div class="menu-item">
+            <button onclick="toggleDropdown('sentiment')">
+                <i class="fas fa-comment-alt"></i>
+                Choose Sentiment
+                <span class="dropdown-icon">▼</span>
+            </button>
+            <div id="sentiment" class="dropdown-content">
+                <button onclick="showContent('positive')"><i class="fas fa-thumbs-up"></i>Positive</button>
+                <button onclick="showContent('negative')"><i class="fas fa-thumbs-down"></i>Negative</button>
+            </div>
+        </div>
+    </div>
+    <div class="main-content" id="mainContent">
+        <div class="welcome-section">
+            <h1>Welcome to Data Insights</h1>
+            <p>Explore comprehensive data visualizations and sentiment analysis with our interactive dashboard. Select an option from the sidebar to dive into the data.</p>
+            <button class="cta-button" onclick="toggleSidebar()">Explore Now</button>
+        </div>
+    </div>
+    <div class="scroll-to-top" id="scrollToTop" onclick="scrollToTop()">↑</div>
+
+    <script>
+        // Toggle sidebar
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            const hamburger = document.querySelector('.hamburger');
+            
+            sidebar.classList.toggle('visible');
+            sidebar.classList.toggle('hidden');
+            mainContent.classList.toggle('shifted');
+            
+            hamburger.innerHTML = sidebar.classList.contains('visible') ? 
+                '<i class="fas fa-times"></i>' : 
+                '<i class="fas fa-bars"></i>';
+        }
+
+        // Toggle dropdown menu
+        function toggleDropdown(id) {
+            const dropdown = document.getElementById(id);
+            const icon = dropdown.previousElementSibling.querySelector('.dropdown-icon');
+            const isActive = dropdown.classList.contains('active');
+            
+            // Close all dropdowns
+            document.querySelectorAll('.dropdown-content').forEach(content => {
+                content.classList.remove('active');
+                const siblingIcon = content.previousElementSibling.querySelector('.dropdown-icon');
+                if (siblingIcon) siblingIcon.textContent = '▼';
+            });
+            
+            // Toggle the clicked dropdown
+            if (!isActive) {
+                dropdown.classList.add('active');
+                icon.textContent = '▲';
+            }
+        }
+
+        // Simple CSV parser
+        function parseCSV(text) {
+            const rows = text.trim().split('\n');
+            if (rows.length <= 1) return [];
+            const headers = rows[0].split(',').map(header => header.trim());
+            return rows.slice(1).map(row => {
+                const values = row.split(',').map(value => value.trim());
+                return headers.reduce((obj, header, index) => {
+                    obj[header] = values[index] || '';
+                    return obj;
+                }, {});
+            });
+        }
+
+        // Fetch and display data
+        function loadData() {
+            const transjatimTable = document.getElementById('transjatim-table');
+            const youtubeTable = document.getElementById('youtube-table');
+            if (!transjatimTable || !youtubeTable) {
+                console.error('Table elements not found');
+                return;
+            }
+            transjatimTable.innerHTML = '<div class="loading">Loading...</div>';
+            youtubeTable.innerHTML = '<div class="loading">Loading...</div>';
+
+            Promise.all([
+                fetch('/transjatim_comments.csv').then(res => {
+                    if (!res.ok) throw new Error(`Failed to fetch TransJatim data: ${res.status} ${res.statusText}`);
+                    return res.text();
+                }),
+                fetch('/youtube_comments.csv').then(res => {
+                    if (!res.ok) throw new Error(`Failed to fetch YouTube data: ${res.status} ${res.statusText}`);
+                    return res.text();
+                })
+            ])
+            .then(([transjatimText, youtubeText]) => {
+                const transjatimData = parseCSV(transjatimText);
+                const youtubeData = parseCSV(youtubeText);
+
+                console.log('TransJatim data:', transjatimData);
+                console.log('YouTube data:', youtubeData);
+
+                if (transjatimData.length === 0) {
+                    transjatimTable.innerHTML = '<div class="no-data">No TransJatim reviews available.</div>';
+                } else {
+                    displayTable('transjatim', transjatimData);
+                }
+
+                if (youtubeData.length === 0) {
+                    youtubeTable.innerHTML = '<div class="no-data">No YouTube comments available.</div>';
+                } else {
+                    displayTable('youtube', youtubeData);
+                }
+            })
+            .catch(err => {
+                console.error('Fetch error:', err);
+                transjatimTable.innerHTML = '<div class="error">Error: Failed to load TransJatim data.</div>';
+                youtubeTable.innerHTML = '<div class="error">Error: Failed to load YouTube data.</div>';
+            });
+        }
+
+        // Display table with sorting
+        function displayTable(type, data) {
+            const tableDiv = document.getElementById(`${type}-table`);
+            const filterInput = document.getElementById(`${type}-filter`);
+            if (!tableDiv || !filterInput) {
+                console.error('Table or filter input not found');
+                return;
+            }
+            let sortColumn = type === 'transjatim' ? 'ulasan' : 'comment';
+            let sortDirection = 'asc';
+
+            function renderTable(filteredData) {
+                const sortedData = [...filteredData].sort((a, b) => {
+                    const valA = (a[sortColumn] || '').toString().toLowerCase();
+                    const valB = (b[sortColumn] || '').toString().toLowerCase();
+                    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                });
+
+                let html = '<table><thead><tr>';
+                const headers = Object.keys(sortedData[0] || {});
+                headers.forEach(header => {
+                    html += `<th onclick="sortTable('${type}', '${header}')">${header} ${sortColumn === header ? (sortDirection === 'asc' ? '↑' : '↓') : ''}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+
+                sortedData.forEach(row => {
+                    html += '<tr>';
+                    headers.forEach(header => {
+                        if (header === 'video_url' && row[header]) {
+                            html += `<td><a href="${row[header]}" target="_blank">${row[header]}</a></td>`;
+                        } else {
+                            html += `<td>${row[header] || ''}</td>`;
+                        }
+                    });
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                tableDiv.innerHTML = html;
+            }
+
+            filterInput.addEventListener('input', () => {
+                const filterValue = filterInput.value.toLowerCase();
+                const filteredData = data.filter(row =>
+                    Object.values(row).some(value =>
+                        (value || '').toString().toLowerCase().includes(filterValue)
+                    )
+                );
+                renderTable(filteredData);
+            });
+
+            window.sortTable = (typeParam, column) => {
+                if (typeParam === type) {
+                    if (sortColumn === column) {
+                        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        sortColumn = column;
+                        sortDirection = 'asc';
+                    }
+                    renderTable(data.filter(row =>
+                        Object.values(row).some(value =>
+                            (value || '').toString().toLowerCase().includes(filterInput.value.toLowerCase())
+                        )
+                    ));
+                }
+            };
+
+            renderTable(data);
+        }
+
+        const positiveSentimentData = [
+            "Great experience with this service!",
+            "Really happy with the results."
+        ];
+
+        const negativeSentimentData = [
+            "Very disappointing product.",
+            "Would not recommend this."
+        ];
+
+        // Classification Report Data (from ScrapingYt.ipynb)
+        const classificationReportText = `
+Classification Report:
+              precision    recall  f1-score   support
+
+     negatif       1.00      1.00      1.00         1
+     positif       1.00      1.00      1.00         1
+
+    accuracy                           1.00         2
+   macro avg       1.00      1.00      1.00         2
+weighted avg       1.00      1.00      1.00         2
+        `;
+
+        // Confusion Matrix Data (from ScrapingYt.ipynb)
+        const confusionMatrixData = [
+            [2, 3], // Actual positif: [Predicted positif, Predicted negatif]
+            [0, 2]  // Actual negatif: [Predicted positif, Predicted negatif]
+        ];
+
+        function showContent(type) {
+            const mainContent = document.getElementById('mainContent');
+            if (!mainContent) {
+                console.error('Main content element not found');
+                return;
+            }
+            let content = '';
+
+            if (type === 'labelAnalysis') {
+                content = `
+                    <h1>Label Analysis</h1>
+                    <div class="section">
+                        <h2>TransJatim Reviews</h2>
+                        <input type="text" id="transjatim-filter" placeholder="Search reviews...">
+                        <div id="transjatim-table"></div>
+                    </div>
+                    <div class="section">
+                        <h2>YouTube Comments</h2>
+                        <input type="text" id="youtube-filter" placeholder="Search comments...">
+                        <div id="youtube-table"></div>
+                    </div>
+                `;
+                mainContent.innerHTML = content;
+                loadData();
+            } else if (type === 'confusionMatrix') {
+                content = `
+                    <h1>Confusion Matrix</h1>
+                    <div class="classification-report">${classificationReportText}</div>
+                    <div class="confusion-matrix-container">
+                        <canvas id="confusionMatrixChart"></canvas>
+                    </div>
+                    
+                `;
+                mainContent.innerHTML = content;
+
+                // Render the Confusion Matrix using Chart.js
+                const ctx = document.getElementById('confusionMatrixChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'matrix', // Chart.js plugin for matrix/heatmap (requires chartjs-chart-matrix)
+                    data: {
+                        datasets: [{
+                            label: 'Confusion Matrix',
+                            data: [
+                                { x: 0, y: 0, v: confusionMatrixData[0][0] }, // True Positives
+                                { x: 1, y: 0, v: confusionMatrixData[0][1] }, // False Negatives
+                                { x: 0, y: 1, v: confusionMatrixData[1][0] }, // False Positives
+                                { x: 1, y: 1, v: confusionMatrixData[1][1] }  // True Negatives
+                            ],
+                            backgroundColor: (ctx) => {
+                                const value = ctx.dataset.data[ctx.dataIndex].v;
+                                // Simulate seaborn's Blues cmap: higher values -> darker blue
+                                const intensity = value / Math.max(...confusionMatrixData.flat());
+                                return `rgba(0, 114, 178, ${intensity})`; // Blues colormap
+                            },
+                            borderColor: 'rgba(0, 0, 0, 0.1)',
+                            borderWidth: 1,
+                            width: ({ chart }) => (chart.chartArea || {}).width / 2 - 1,
+                            height: ({ chart }) => (chart.chartArea || {}).height / 2 - 1
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: 'Confusion Matrix'
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    callback: (value) => ['positif', 'negatif'][value]
+                                },
+                                title: { display: true, text: 'Predicted' }
+                            },
+                            y: {
+                                ticks: {
+                                    callback: (value) => ['positif', 'negatif'][value]
+                                },
+                                title: { display: true, text: 'Actual' }
+                            }
+                        },
+                        elements: {
+                            matrix: {
+                                borderRadius: 5
+                            }
+                        }
+                    }
+                });
+            } else if (type === 'positive') {
+                content = `
+                    <h1>Positive Sentiment</h1>
+                    <ul class="list-disc pl-5">
+                        ${positiveSentimentData.map(item => `<li>${item}</li>`).join('')}
+                    </ul>
+                `;
+                mainContent.innerHTML = content;
+            } else if (type === 'negative') {
+                content = `
+                    <h1>Negative Sentiment</h1>
+                    <ul class="list-disc pl-5">
+                        ${negativeSentimentData.map(item => `<li>${item}</li>`).join('')}
+                    </ul>
+                `;
+                mainContent.innerHTML = content;
+            }
+        }
+
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        window.onscroll = function() {
+            const scrollBtn = document.getElementById('scrollToTop');
+            if (scrollBtn) {
+                if (document.body.scrollTop > 100 || document.documentElement.scrollTop > 100) {
+                    scrollBtn.classList.add('show');
+                } else {
+                    scrollBtn.classList.remove('show');
+                }
+            }
+        };
+    </script>
+    <!-- Include Chart.js Matrix plugin for heatmap -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.1.0/dist/chartjs-chart-matrix.min.js"></script>
+</body>
+</html>
